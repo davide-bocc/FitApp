@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Coach - Crea Esercizio</title>
+</head>
+<body>
+  <h2>Login Coach</h2>
+  <form id="loginForm">
+    <input type="email" id="email" placeholder="Email" required><br>
+    <input type="password" id="password" placeholder="Password" required><br>
+    <button type="submit">Login</button>
+  </form>
+
+  <h2>Crea Esercizio</h2>
+  <form id="exerciseForm">
+    <input type="text" id="exerciseName" placeholder="Nome esercizio" required><br>
+    <input type="text" id="exerciseDesc" placeholder="Descrizione"><br>
+    <button type="submit">Crea</button>
+  </form>
+
+  <p id="result"></p>
+
+  <script>
+    //LOGIN FORM
+    document.getElementById('loginForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
+
+      const response = await fetch('http://127.0.0.1:8000/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        localStorage.setItem('token', data.access_token); //salva token
+        alert("Login effettuato");
+      } else {
+        alert("Credenziali errate");
+      }
+    });
+
+    //CREA ESERCIZIO
+    document.getElementById('exerciseForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+
+      const name = document.getElementById('exerciseName').value;
+      const description = document.getElementById('exerciseDesc').value;
+      const token = localStorage.getItem('token'); //recupera token
+
+      const response = await fetch('http://127.0.0.1:8000/coach/exercises/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ name, description })
+      });
+
+      const result = document.getElementById('result');
+      if (response.ok) {
+        const data = await response.json();
+        result.textContent = `Esercizio creato con ID: ${data.id}`;
+      } else {
+        result.textContent = `Errore: ${response.status}`;
+      }
+    });
+  </script>
+</body>
+</html>
