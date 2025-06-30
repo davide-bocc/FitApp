@@ -1,2 +1,13 @@
+# Python cache files
 __pycache__/
 *.pyc
+
+# Node modules (se frontend è node)
+node_modules/
+
+# Logs
+logs/
+*.log
+
+# Environment variables
+.env
