@@ -8,3 +8,11 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     email: str | None = None
     user_id: int | None = None
+
+class UserInToken(BaseModel):
+    id: int
+    email: str
+    role: str
+
+class LoginResponse(Token):
+    user: UserInToken

@@ -9,14 +9,12 @@ from backend.db_models.user_models import User as UserModel
 from backend.core.auth_dependencies import get_current_coach
 
 
-# Import per evitare circular imports
 def get_db():
     from backend.core.database import get_db as db_session
     return db_session()
 
 
 # Import dei modelli e schemi
-from backend.db_models import models
 from backend.schemas.schemas import WorkoutCreate, WorkoutOut
 
 router = APIRouter(prefix="/workouts", tags=["workouts"])
@@ -68,8 +66,12 @@ async def create_workout(
 
 
 @router.get("/", response_model=List[WorkoutOut])
-def list_workouts(
-        db: Session = Depends(get_db)
-) -> List[WorkoutOut]:
-    workouts = db.query(models.Workout).all()
-    return workouts
+async def list_workouts(
+    db: AsyncSession = Depends(get_db),
+    current_user: UserModel = Depends(get_current_coach)
+):
+    """
+    Lista tutti i workout (solo per coach)
+    """
+    result = await db.execute(select(Workout))
+    return result.scalars().all()

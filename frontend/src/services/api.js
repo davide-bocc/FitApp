@@ -1,53 +1,68 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'http://localhost:8000',
-  transformRequest: [(data, headers) => {
-    // Gestione automatica di URLSearchParams
-    if (data instanceof URLSearchParams) {
-      headers['Content-Type'] = 'application/x-www-form-urlencoded';
-      return data.toString();
-    }
-    return data;
-  }]
+  baseURL: process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000',
+  withCredentials: true,
+  headers: {
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+  },
 });
 
-// Interceptor
+// Request Interceptor (logging solo in dev)
 api.interceptors.request.use(config => {
-  if (config.data instanceof FormData) {
-    config.headers['Content-Type'] = 'multipart/form-data';
+  const isDev = process.env.NODE_ENV === 'development';
+  const requestId = Math.random().toString(36).substring(2, 6);
+  config.metadata = { requestId };
 
-    // Debug: mostra il contenuto di FormData
-    const formDataObj = {};
-    config.data.forEach((value, key) => formDataObj[key] = value);
-    console.log('Interceptor - FormData:', formDataObj);
+  if (isDev) {
+    console.debug(`[API] ${requestId} ${config.method?.toUpperCase()} ${config.url}`, {
+      headers: {
+        ...config.headers,
+        Authorization: config.headers.Authorization ? 'Bearer [HIDDEN]' : undefined
+      },
+      data: config.data instanceof FormData ? '[FormData]' : config.data
+    });
   }
+
   return config;
 });
 
-export default api;
-
-// Response interceptor
+// Response Interceptor
 api.interceptors.response.use(
-  (response) => {
-    console.log('[API] Response from:', response.config.url);
+  response => {
+    const { requestId } = response.config.metadata;
+    if (process.env.NODE_ENV === 'development') {
+      console.debug(`[API] ${requestId} ${response.status}`, {
+        path: response.config.url,
+        data: response.data
+      });
+    }
     return response;
   },
-  (error) => {
-    const errorData = {
-      status: error.response?.status,
-      message: error.response?.data?.detail || error.message,
-      url: error.config?.url
-    };
-    console.error('[API] Error:', errorData);
-
-    if (error.response?.status === 401) {
-      localStorage.removeItem('authToken');
-      sessionStorage.removeItem('authToken');
-      window.location.href = '/auth/login';
+  error => {
+    if (!error.response) {
+      console.error('[API] Network Error:', error.message);
+      return Promise.reject({
+        code: 'NETWORK_ERROR',
+        message: 'Errore di connessione al server',
+        isNetworkError: true
+      });
     }
 
-    return Promise.reject(errorData);
+    const { status, data } = error.response;
+    const { requestId } = error.config?.metadata || {};
+
+    const apiError = {
+      status,
+      code: data?.code || `HTTP_${status}`,
+      message: data?.detail || data?.message || 'Errore nella richiesta API',
+      path: error.config?.url,
+      timestamp: new Date().toISOString()
+    };
+
+    console.error(`[API] ${requestId} Error:`, apiError);
+    return Promise.reject(apiError);
   }
 );
 

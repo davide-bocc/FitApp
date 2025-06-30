@@ -1,12 +1,13 @@
 from fastapi import FastAPI, Depends, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import HTMLResponse, Response
 from fastapi.security import OAuth2PasswordBearer
 from contextlib import asynccontextmanager
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import text, inspect
+from sqlalchemy import text, inspect, create_engine
 from pathlib import Path
 import logging
+
 from backend.core.config import settings
 from backend.core.dependencies import get_current_active_user
 from backend.core.database import async_engine, AsyncSessionLocal, get_db_session
@@ -19,6 +20,10 @@ from backend.core.auth_dependencies import get_db
 from backend.db_models.base import Base
 from backend.schemas.workout_schemas import resolve_forward_refs
 resolve_forward_refs()
+from backend.core.token_middleware import token_validator_middleware
+
+# Motore sincrono per inspect in health check
+sync_engine = create_engine(settings.SYNC_DATABASE_URL)
 
 # Configurazione logging
 logging.basicConfig(
@@ -56,6 +61,7 @@ async def lifespan(app: FastAPI):
             db_path = settings.SYNC_DATABASE_URL.replace("sqlite:///", "")
             logger.info(f"📂 Percorso database: {Path(db_path).absolute()}")
 
+        # Creazione tabelle e indici
         async with async_engine.begin() as conn:
             inspector = await conn.run_sync(lambda sync_conn: inspect(sync_conn))
 
@@ -80,7 +86,7 @@ async def lifespan(app: FastAPI):
             logger.info("\n🔍 Verifica indici:")
             for table_name, table in Base.metadata.tables.items():
                 if table_name not in existing_tables:
-                    continue  #
+                    continue
 
                 existing_indexes = await conn.run_sync(
                     lambda sync_conn, tn=table_name: inspector.get_indexes(tn)
@@ -99,6 +105,7 @@ async def lifespan(app: FastAPI):
                     else:
                         logger.debug(f"  ✔️ Indice {index.name} esiste già su {table_name}")
 
+            # Indici aggiuntivi richiesti
             required_indexes = {
                 'users': [
                     {'name': 'uidx_users_email', 'columns': ['email'], 'unique': True},
@@ -132,7 +139,7 @@ async def lifespan(app: FastAPI):
             logger.info("\n🌱 Popolamento dati di test...")
             try:
                 from backend.tests.populate_test_data import populate_test_data
-                async with SessionLocal() as db:
+                async with AsyncSessionLocal() as db:
                     await populate_test_data(db)
                 logger.info("✅ Dati di test inseriti con successo")
             except Exception as e:
@@ -173,18 +180,34 @@ app = FastAPI(
     }
 )
 
-# Configurazione CORS
+# CORS
+origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000"
+]
+
+# Middleware personalizzato per validazione token
+app.middleware("http")(token_validator_middleware)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ALLOWED_ORIGINS,
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["*"]
+    expose_headers=["Authorization"]
 )
 
+# Middleware logging richieste in DEV_MODE
+@app.middleware("http")
+async def log_headers(request: Request, call_next):
+    if settings.DEV_MODE:
+        logger.debug("Richiesta a %s", request.url.path)
+    response = await call_next(request)
+    return response
 
-# Endpoint principale
+
+# Endpoint principale (home page)
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 async def root(request: Request):
     return f"""
@@ -226,8 +249,10 @@ async def root(request: Request):
 @app.get("/health", include_in_schema=False)
 async def health_check(db: AsyncSession = Depends(get_db)):
     try:
+        # Verifica connessione DB
         await db.execute(text("SELECT 1"))
 
+        # Controllo presenza tabelle (usando motore sync per inspect)
         required_tables = {"users", "workouts", "exercises", "workout_assignments"}
         inspector = inspect(sync_engine)
         existing_tables = set(inspector.get_table_names())
@@ -258,7 +283,7 @@ async def health_check(db: AsyncSession = Depends(get_db)):
         )
 
 
-# Registrazione router con gestione errori
+# Registrazione router con gestione errori e dipendenze
 routers = [
     (auth_router, "/auth", "Authentication"),
     (coach_router, "/coaches", "Coaches"),
@@ -288,6 +313,10 @@ async def favicon():
     return Response(status_code=204)
 
 
+# OAuth2 scheme
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+
+
 if __name__ == "__main__":
     import uvicorn
 
@@ -298,5 +327,3 @@ if __name__ == "__main__":
         reload=settings.DEV_MODE,
         log_level="info"
     )
-
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")

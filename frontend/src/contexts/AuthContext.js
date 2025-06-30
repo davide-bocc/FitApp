@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import { getCurrentUser } from '../services/authService';
+import { login as authLogin, getCurrentUser, logout as authLogout } from '../services/authService';
 
 const AuthContext = createContext();
 
@@ -13,6 +13,7 @@ export const AuthProvider = ({ children }) => {
         const userData = await getCurrentUser();
         setUser(userData);
       } catch (err) {
+        console.error('Failed to load user:', err);
         setUser(null);
       } finally {
         setLoading(false);
@@ -22,20 +23,42 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = async (email, password) => {
-    const userData = await authService.login(email, password);
-    setUser(userData);
+    try {
+      const userData = await authLogin(email, password);
+      setUser(userData);
+      return userData;
+    } catch (err) {
+      console.error('Login failed:', err);
+      setUser(null);
+      throw err;
+    }
   };
 
-  const logout = () => {
-    authService.logout();
-    setUser(null);
+  const logout = async () => {
+    try {
+      await authLogout();
+    } finally {
+      setUser(null);
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{
+      user,
+      loading,
+      login,
+      logout,
+      isAuthenticated: !!user && !loading
+    }}>
       {children}
     </AuthContext.Provider>
   );
 };
 
-export const useAuth = () => useContext(AuthContext);
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};

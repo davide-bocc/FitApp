@@ -1,48 +1,32 @@
-import { createContext, useContext, useState, useEffect } from 'react';
-import { login as authLogin, getCurrentUser } from '../services/authService';
+import api from './api';
 
-const AuthContext = createContext();
+export const authService = {
+  async login(email, password) {
+    // Login con cookie HttpOnly, non gestiamo token manualmente
+    const response = await api.post('/auth/login', { email, password }, { withCredentials: true });
+    return response.data;
+  },
 
-export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const userData = await getCurrentUser();
-        setUser(userData);
-      } catch (err) {
-        setUser(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadUser();
-  }, []);
-
-  const login = async (email, password) => {
+  async logout() {
     try {
-      const userData = await authLogin(email, password);
-      setUser(userData);
-      return userData;
-    } catch (err) {
-      setUser(null);
-      throw err;
+      await api.post('/auth/logout', {}, { withCredentials: true });
+    } catch (error) {
+      console.error('Errore durante logout:', error.message);
     }
-  };
+  },
 
-  const logout = () => {
-    localStorage.removeItem('authToken');
-    sessionStorage.removeItem('authToken');
-    setUser(null);
-  };
+  async getCurrentUser() {
+    try {
+      const response = await api.get('/auth/me', { withCredentials: true });
+      return response.data;
+    } catch (error) {
+      console.error('Errore getCurrentUser:', error);
+      return null;
+    }
+  },
 
-  return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
-      {children}
-    </AuthContext.Provider>
-  );
+  // Metodo isAuthenticated vuoto perché non gestiamo token in frontend
+  isAuthenticated() {
+    return false;
+  }
 };
-
-export { AuthProvider };

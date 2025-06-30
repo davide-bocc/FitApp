@@ -1,19 +1,36 @@
 import { useRouter } from 'next/router';
-import { useAuth } from '../contexts/AuthContext';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { authService } from '../../services/authService';
 
 export default function AuthGuard({ children }) {
-  const { user, loading } = useAuth();
   const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [authenticated, setAuthenticated] = useState(false);
 
   useEffect(() => {
-    if (!loading && !user) {
-      router.push('/auth/login');
+    async function checkAuth() {
+      try {
+        const user = await authService.getCurrentUser();
+        if (!user) {
+          router.push('/auth/login');
+          return;
+        }
+        setAuthenticated(true);
+      } catch {
+        router.push('/auth/login');
+      } finally {
+        setLoading(false);
+      }
     }
-  }, [user, loading]);
+    checkAuth();
+  }, [router]);
 
-  if (loading || !user) {
+  if (loading) {
     return <div>Loading...</div>;
+  }
+
+  if (!authenticated) {
+    return null; // Oppure un messaggio di redirect
   }
 
   return children;

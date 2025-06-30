@@ -1,23 +1,19 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/router';
-import useAuth from '../../hooks/useAuth';
-import LoginForm from '../../components/auth/LoginForm';
+import { authService } from '../../services/authService';
 
 const LoginPage = () => {
-  const { user, loading } = useAuth();
   const router = useRouter();
-  const [isRedirecting, setIsRedirecting] = useState(false);
 
   useEffect(() => {
-    if (!loading && user && !isRedirecting) {
-      setIsRedirecting(true);
-      router.push('/dashboard');
+    async function checkAuth() {
+      const user = await authService.getCurrentUser();
+      if (user) {
+        router.push('/dashboard');
+      }
     }
-  }, [user, loading, isRedirecting]);
-
-  if (loading || isRedirecting) {
-    return <div>Caricamento...</div>;
-  }
+    checkAuth();
+  }, [router]);
 
   return (
     <div className="auth-page">
@@ -28,3 +24,5 @@ const LoginPage = () => {
 };
 
 export default LoginPage;
+
+import LoginForm from '../../components/auth/LoginForm';
