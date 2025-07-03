@@ -1,16 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
-
-
-def get_current_active_user():
-    from backend.core.auth_dependencies import get_current_active_user
-    return get_current_active_user()
-
-def get_db():
-    from backend.core.database import get_async_db
-    return get_async_db()
-
+from backend.core.auth_dependencies import get_current_active_user
+from backend.core.database import get_db
 from backend.db_models.user_models import User, UserRole
 from backend.schemas.workout_schemas import WorkoutCreate, WorkoutOut, WorkoutAssignmentCreate
 from backend.schemas.user import TraineeOut

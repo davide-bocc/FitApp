@@ -22,10 +22,10 @@ class Settings(BaseSettings):
     ASYNC_SQLITE_DB_PATH: str = f"sqlite+aiosqlite:///{SQLITE_DB_PATH}"
 
     # JWT Configuration
-    SECRET_KEY: str = "tuo-segreto-super-securo"
+    SECRET_KEY: str = "Cl1mb!ng"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 7  # Nuova configurazione
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
     # Auth & Security
     DEV_MODE: bool = True
@@ -34,14 +34,14 @@ class Settings(BaseSettings):
     SECURE_COOKIES: bool = not DEV_MODE
     SESSION_TIMEOUT: int = 3600  # 1 ora
 
-    # Logging Configuration (Nuova sezione)
+    # Logging Configuration
     LOG_LEVEL: str = "DEBUG" if DEV_MODE else "INFO"
     LOG_FILE: str = str(Path('logs/app.log').absolute())
-    LOG_ROTATION: str = "10 MB"  # Rotazione log
-    LOG_RETENTION: str = "7 days"  # Conservazione log
-    LOG_SENSITIVE_FILTER: bool = True  # Filtra dati sensibili
+    LOG_ROTATION: str = "10 MB"
+    LOG_RETENTION: str = "7 days"
+    LOG_SENSITIVE_FILTER: bool = True
 
-    # Email (configurazione di esempio)
+    # Email
     SMTP_SERVER: Optional[str] = None
     SMTP_PORT: Optional[int] = None
     SMTP_USER: Optional[str] = None
@@ -59,7 +59,6 @@ class Settings(BaseSettings):
                 env_settings,
                 file_secret_settings,
         ):
-            # Disabilita i secrets se non in produzione
             if not cls().DEV_MODE:
                 return init_settings, env_settings
             return init_settings, env_settings, file_secret_settings

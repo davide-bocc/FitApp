@@ -61,7 +61,6 @@ async def check_index_exists(conn, table_name, index_name):
 
 
 async def async_init_db():
-    """Inizializzazione completa del database in modalità asincrona"""
     try:
         async with async_engine.begin() as conn:
             # Crea tutte le tabelle
@@ -110,4 +109,3 @@ if __name__ == "__main__":
     import asyncio
 
     asyncio.run(async_init_db())
-

@@ -19,7 +19,6 @@ class SecurityFilter(logging.Filter):
 
 
 def setup_logger():
-    """Configurazione logger avanzata"""
     logger = logging.getLogger(__name__)
     logger.setLevel(settings.LOG_LEVEL)
 

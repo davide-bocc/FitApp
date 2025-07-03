@@ -1,10 +1,42 @@
 import api from './api';
 
 export const authService = {
+  async getProtectedData() {
+    try {
+      // Invia SOLO il cookie, senza header Authorization
+      const response = await api.post('/coaches/coaches/workouts/',
+        { /* dati della richiesta */ },
+        {
+          withCredentials: true,
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Error:', error);
+      throw error;
+    }
+  },
+
   async login(email, password) {
-    // Login con cookie HttpOnly, non gestiamo token manualmente
-    const response = await api.post('/auth/login', { email, password }, { withCredentials: true });
-    return response.data;
+    try {
+      const formData = new FormData();
+      formData.append('username', email);
+      formData.append('password', password);
+
+      const response = await api.post('/auth/login', formData, {
+        withCredentials: true,
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Login failed:', error.response?.data || error.message);
+      throw error;
+    }
   },
 
   async logout() {
@@ -23,9 +55,9 @@ export const authService = {
       console.error('Errore getCurrentUser:', error);
       return null;
     }
+
   },
 
-  // Metodo isAuthenticated vuoto perché non gestiamo token in frontend
   isAuthenticated() {
     return false;
   }

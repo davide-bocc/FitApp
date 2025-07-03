@@ -183,7 +183,9 @@ app = FastAPI(
 # CORS
 origins = [
     "http://localhost:3000",
-    "http://127.0.0.1:3000"
+    "http://127.0.0.1:3000",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000"
 ]
 
 # Middleware personalizzato per validazione token
@@ -195,15 +197,17 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["Authorization"]
+    expose_headers=["*"]
 )
 
 # Middleware logging richieste in DEV_MODE
 @app.middleware("http")
-async def log_headers(request: Request, call_next):
-    if settings.DEV_MODE:
-        logger.debug("Richiesta a %s", request.url.path)
+async def add_security_headers(request: Request, call_next):
     response = await call_next(request)
+    if settings.DEV_MODE:
+        response.headers["Access-Control-Expose-Headers"] = "*"
+        response.headers["Access-Control-Allow-Origin"] = request.headers.get("origin", "*")
+        response.headers["Access-Control-Allow-Credentials"] = "true"
     return response
 
 

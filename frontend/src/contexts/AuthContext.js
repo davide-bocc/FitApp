@@ -23,16 +23,23 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = async (email, password) => {
-    try {
-      const userData = await authLogin(email, password);
-      setUser(userData);
-      return userData;
-    } catch (err) {
-      console.error('Login failed:', err);
-      setUser(null);
-      throw err;
+  const response = await api.post('/auth/login', {
+    username: email,
+    password
+  }, {
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded'  // Formato corretto per OAuth2
     }
-  };
+  });
+
+  // Non memorizzare il token in localStorage - usa solo il cookie HttpOnly
+  return response.data.user;
+ };
+
+ const fetchProtectedData = async () => {
+   return await api.get('/protected-route');
+   // Axios gestirà automaticamente i cookie
+ };
 
   const logout = async () => {
     try {

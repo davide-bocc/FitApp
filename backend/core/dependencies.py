@@ -1,4 +1,4 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import Request, HTTPException, status, Depends
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -14,9 +14,20 @@ from backend.core.config import settings
 class TokenData(BaseModel):
     email: Optional[str] = None
 
+async def oauth2_scheme_cookie_or_header(request: Request):
+    auth_header = request.headers.get("authorization")
+    if auth_header and auth_header.lower().startswith("bearer "):
+        return auth_header[7:]
+    token_cookie = request.cookies.get("access_token")
+    if token_cookie:
+        return token_cookie
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Not authenticated",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
-
+oauth2_scheme = oauth2_scheme_cookie_or_header
 
 async def get_current_user(
     token: Annotated[str, Depends(oauth2_scheme)],

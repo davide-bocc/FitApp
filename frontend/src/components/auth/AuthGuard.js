@@ -30,7 +30,7 @@ export default function AuthGuard({ children }) {
   }
 
   if (!authenticated) {
-    return null; // Oppure un messaggio di redirect
+    return null;
   }
 
   return children;

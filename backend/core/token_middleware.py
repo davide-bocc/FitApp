@@ -1,119 +1,79 @@
 from fastapi import Request, HTTPException
 from fastapi.responses import JSONResponse
-from datetime import datetime
 import logging
-import re
+from jose import jwt, JWTError
+from backend.core.config import settings
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-
 class TokenValidationError(HTTPException):
-    """Eccezione personalizzata per errori di validazione token"""
-
-    def __init__(self, detail: str, status_code: int = 400):
+    def __init__(self, detail: str, status_code: int = 401):
         super().__init__(
             status_code=status_code,
             detail=detail,
             headers={"WWW-Authenticate": "Bearer"}
         )
 
+EXCLUDED_PATHS = {
+    "/", "/auth/login", "/auth/logout", "/auth/me",
+    "/docs", "/openapi.json", "/favicon.ico", "/redoc"
+}
 
 async def token_validator_middleware(request: Request, call_next):
-    """
-    Middleware avanzato per la validazione dei token con:
-    - Blocco assoluto di token non standard
-    - Validazione JWT rigorosa
-    - Protezione contro token legacy
-    - Logging dettagliato
-    """
+    logger.debug(f"Incoming cookies: {request.cookies}")
+    logger.debug(f"Incoming headers: {dict(request.headers)}")
+    # Skip validation for excluded paths
+    if request.url.path in EXCLUDED_PATHS:
+        logger.debug(f"Bypassing token validation for {request.url.path}")
+        return await call_next(request)
+
     try:
-        # 1. Estrazione e pulizia header
-        auth_header = request.headers.get("authorization", "").strip()
-        logger.debug(f"Inizio validazione token per {request.url.path}")
+        # Try to get token from cookies or headers
+        token = request.cookies.get("access_token") or _extract_token_from_headers(request)
+        if not token:
+            logger.warning("Token not found in cookies or headers")
+            raise TokenValidationError("Authentication required")
 
-        # 2. Controllo assoluto per token non consentiti
-        forbidden_patterns = [
-            r"manual_token",  # Blocca manual_token in qualsiasi forma
-            r"Bearer\s+[^eyJ]",  # Blocca token che non iniziano con eyJ
-            r"Bearer\s+\S{0,20}",  # Blocca token troppo corti
-        ]
+        # Validate token and attach user to request
+        request.state.user = _validate_jwt(token)
+        logger.debug(f"Authenticated user: {request.state.user.get('sub')}")
 
-        for pattern in forbidden_patterns:
-            if re.search(pattern, auth_header, re.IGNORECASE):
-                logger.error(f"Token proibito rilevato: {auth_header[:30]}...")
-                raise TokenValidationError(
-                    "Formato token non consentito",
-                    status_code=403
-                )
+        return await call_next(request)
 
-        # 3. Validazione JWT rigorosa
-        if auth_header.startswith("Bearer "):
-            token = auth_header[7:]
-
-            # Verifica struttura JWT di base
-            if not re.match(r'^eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]*$', token):
-                logger.warning(f"Token JWT malformato: {token[:20]}...")
-                raise TokenValidationError(
-                    "Struttura token JWT non valida",
-                    status_code=401
-                )
-
-            # Verifica parti del token
-            parts = token.split('.')
-            if len(parts) != 3:
-                raise TokenValidationError(
-                    "Token JWT deve avere 3 parti separate",
-                    status_code=401
-                )
-
-        # 4. Logging differenziato
-        if request.url.path not in ["/docs", "/openapi.json", "/favicon.ico"]:
-            log_message = f"Accesso a {request.method} {request.url.path}"
-            if auth_header:
-                log_message += f" | Token: {auth_header[:6]}...{auth_header[-6:]}"
-            logger.info(log_message)
-
-        response = await call_next(request)
-
-        # 5. Pulizia header sensibili nella risposta
-        sensitive_headers = ["server", "x-powered-by"]
-        for header in sensitive_headers:
-            if header in response.headers:
-                del response.headers[header]
-
-        return response
-
-    except TokenValidationError as tve:
-        logger.warning(f"Validazione token fallita: {tve.detail}")
+    except TokenValidationError as e:
+        logger.warning(f"Token validation failed: {e.detail}")
         return JSONResponse(
-            status_code=tve.status_code,
-            content={
-                "error": "token_validation_failed",
-                "detail": tve.detail,
-                "timestamp": datetime.now().isoformat(),
-                "path": request.url.path,
-                "suggested_action": "Esegui nuovamente il login"
-            }
+            status_code=e.status_code,
+            content={"detail": e.detail},
+            headers=e.headers
         )
-
-    except HTTPException as http_exc:
-        logger.error(f"Errore HTTP durante la validazione: {http_exc.detail}")
-        return JSONResponse(
-            status_code=http_exc.status_code,
-            content={
-                "error": "authentication_error",
-                "detail": http_exc.detail,
-                "timestamp": datetime.now().isoformat()
-            }
-        )
-
-    except Exception as exc:
-        logger.critical(f"Errore imprevisto nel middleware: {str(exc)}", exc_info=True)
+    except Exception as e:
+        logger.error(f"Unexpected error: {str(e)}", exc_info=True)
         return JSONResponse(
             status_code=500,
-            content={
-                "error": "internal_server_error",
-                "detail": "Errore durante la validazione del token",
-                "timestamp": datetime.now().isoformat()
-            }
+            content={"detail": "Internal server error"},
+            headers={"WWW-Authenticate": "Bearer"}
         )
+
+def _extract_token_from_headers(request: Request) -> Optional[str]:
+    auth_header = request.headers.get("authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        return auth_header[7:]
+    return None
+
+def _validate_jwt(token: str) -> dict:
+    try:
+        payload = jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM]
+        )
+        if not payload.get("sub"):
+            raise TokenValidationError("Invalid token payload")
+        return payload
+    except jwt.ExpiredSignatureError:
+        raise TokenValidationError("Token expired")
+    except JWTError as e:
+        logger.error(f"JWT validation error: {str(e)}")
+        raise TokenValidationError("Invalid token")
