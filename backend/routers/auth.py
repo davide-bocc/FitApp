@@ -109,8 +109,13 @@ async def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    access_token = create_access_token(data={"sub": user.email})
-
+    access_token = create_access_token(
+        data={
+            "sub": user.email,
+            "role": user.role,
+            "user_id": str(user.id)
+        }
+    )
     response = JSONResponse(content={
         "access_token": access_token,
         "token_type": "bearer",
@@ -124,12 +129,13 @@ async def login(
     response.set_cookie(
         key="access_token",
         value=access_token,
+        domain=None,
         httponly=True,
         secure=False,  # mettere True in vase di produzione
         samesite="lax",
         max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        path="/",
-        domain="localhost"
+        path="/"
+
     )
 
     logger.info(f"User logged in: {user.email}")

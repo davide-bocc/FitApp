@@ -1,36 +1,36 @@
-from typing import TYPE_CHECKING
 from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from backend.schemas.workout_schemas import WorkoutCreate
+from backend.db_models.workout import Workout
+from backend.db_models.user_models import User, UserRole
 
-if TYPE_CHECKING:
-    from backend.schemas.workout_schemas import WorkoutCreate
-    from backend.db_models.workout import Workout
 
-
-
-def create_workout_for_coach(
-        db: Session,
-        coach_id: int,
-        workout_data: 'WorkoutCreate'
-) -> 'Workout':
+async def create_workout_for_coach(
+    db: AsyncSession,
+    coach_id: int,
+    workout_data: WorkoutCreate
+) -> Workout:
     # Verificare che l'utente sia un coach
-    from backend.db_models.user_models import User
-    coach = db.query(User).filter(
-        User.id == coach_id,
-        User.role == "coach"
-    ).first()
+    result = await db.execute(select(User).where(User.id == coach_id))
+    coach = result.scalars().first()
 
-    if not coach:
-        raise ValueError("User is not a coach or doesn't exist")
+    if not coach or coach.role != "coach":
+        raise HTTPException(status_code=404, detail="Coach not found")
 
-    # Convertire lo schema Pydantic in dizionario
     workout_dict = workout_data.model_dump()
-    workout_dict["coach_id"] = coach_id
+    if 'status' in workout_dict and not hasattr(Workout, 'status'):
+        del workout_dict['status']
 
-    # Creare il modello SQLAlchemy
-    db_workout = Workout(**workout_dict)
+    # Creare il workout
+    db_workout = Workout(
+        **workout_dict,
+        coach_id=coach_id
+    )
+
     db.add(db_workout)
-    db.commit()
-    db.refresh(db_workout)
+    await db.commit()
+    await db.refresh(db_workout)
 
     return db_workout
 

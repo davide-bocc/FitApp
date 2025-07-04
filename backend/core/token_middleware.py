@@ -21,40 +21,30 @@ EXCLUDED_PATHS = {
 }
 
 async def token_validator_middleware(request: Request, call_next):
-    logger.debug(f"Incoming cookies: {request.cookies}")
-    logger.debug(f"Incoming headers: {dict(request.headers)}")
-    # Skip validation for excluded paths
     if request.url.path in EXCLUDED_PATHS:
-        logger.debug(f"Bypassing token validation for {request.url.path}")
         return await call_next(request)
+
+    # Cerca il token in 3 possibili posizioni
+    token = (
+        request.cookies.get("access_token") or
+        request.headers.get("authorization", "").replace("Bearer ", "") or
+        request.headers.get("x-access-token", "")
+    )
+
+    if not token:
+        print("=== ERRORE: TOKEN NON TROVATO ===")
+        raise HTTPException(status_code=401, detail="Not authenticated")
 
     try:
-        # Try to get token from cookies or headers
-        token = request.cookies.get("access_token") or _extract_token_from_headers(request)
-        if not token:
-            logger.warning("Token not found in cookies or headers")
-            raise TokenValidationError("Authentication required")
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        request.state.user = payload
+        print(f"=== TOKEN VALIDO PER: {payload.get('sub')} ===")
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
 
-        # Validate token and attach user to request
-        request.state.user = _validate_jwt(token)
-        logger.debug(f"Authenticated user: {request.state.user.get('sub')}")
-
-        return await call_next(request)
-
-    except TokenValidationError as e:
-        logger.warning(f"Token validation failed: {e.detail}")
-        return JSONResponse(
-            status_code=e.status_code,
-            content={"detail": e.detail},
-            headers=e.headers
-        )
-    except Exception as e:
-        logger.error(f"Unexpected error: {str(e)}", exc_info=True)
-        return JSONResponse(
-            status_code=500,
-            content={"detail": "Internal server error"},
-            headers={"WWW-Authenticate": "Bearer"}
-        )
+    return await call_next(request)
 
 def _extract_token_from_headers(request: Request) -> Optional[str]:
     auth_header = request.headers.get("authorization")

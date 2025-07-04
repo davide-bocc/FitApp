@@ -11,6 +11,8 @@ from backend.services.coach_service import (
     assign_workout_to_trainee,
     get_coach_trainees
 )
+from backend.core.dependencies import get_current_coach
+
 
 router = APIRouter(
     prefix="/coaches",
@@ -19,14 +21,17 @@ router = APIRouter(
 
 @router.post("/workouts/", response_model=WorkoutOut, status_code=status.HTTP_201_CREATED)
 async def create_workout(
-    workout_data: WorkoutCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
+        workout_data: WorkoutCreate,
+        current_user: dict = Depends(get_current_coach),
+        db: AsyncSession = Depends(get_db)
 ):
-    if current_user.role != UserRole.COACH:
+    if current_user.get("role") != "coach":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo i coach possono creare schede")
-    return await create_workout_for_coach(db=db, coach_id=current_user.id, workout_data=workout_data)
-
+    return await create_workout_for_coach(
+        db=db,
+        coach_id=current_user["user_id"],
+        workout_data=workout_data
+    )
 @router.post("/workouts/assign", response_model=WorkoutOut, status_code=status.HTTP_201_CREATED)
 async def assign_workout(
     assignment_data: WorkoutAssignmentCreate,

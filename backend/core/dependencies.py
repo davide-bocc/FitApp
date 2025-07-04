@@ -62,25 +62,33 @@ async def get_current_user(
 
 
 async def get_current_active_user(
-    current_user: Annotated[User, Depends(get_current_user)]
-) -> User:
-    if not current_user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="L'utente non è attivo"
-        )
-    return current_user
+        request: Request
+) -> dict:
+    token = request.cookies.get("access_token") or request.headers.get("Authorization", "").replace("Bearer ", "")
+
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        return payload
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
 
 
-async def get_current_coach(
-    current_user: Annotated[User, Depends(get_current_active_user)]
-) -> User:
-    if current_user.role != UserRole.COACH:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Solo i coach possono accedere a questa risorsa"
-        )
-    return current_user
+async def get_current_coach(request: Request) -> dict:
+    token = request.cookies.get("access_token") or request.headers.get("Authorization", "").replace("Bearer ", "")
+
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing token")
+
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        if payload.get("role") != "coach":
+            raise HTTPException(status_code=403, detail="Coach role required")
+        return payload
+    except jwt.JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
 
 
 async def get_current_trainee(
